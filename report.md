@@ -45,6 +45,7 @@ My friend suggested the background music. I initially didn't want to use any wel
 - Could have added more unique power ups
 - Level design could have been tuned better. Some players found them hard, others easy.
 - Did not add high scores, etc
+- Could not add particle affects to run/jump/pound.
 
 ## 5. Who worked on what
 
