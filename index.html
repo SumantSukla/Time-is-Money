@@ -1,0 +1,2351 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Time is Money</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      .press-start-2p-regular {
+        font-family: "Press Start 2P", system-ui;
+        font-weight: 400;
+        font-style: normal;
+      }
+    </style>
+    <div
+      id="overlay"
+      style="
+        height: 100%;
+        width: 100%;
+        position: absolute;
+        top: 0;
+        left: 0;
+        background-color: #211f30;
+        z-index: 1000;
+        justify-content: center;
+        align-items: center;
+        display: flex;
+      "
+      onclick="document.getElementById('overlay').style.display = 'none'"
+    >
+      <p
+        style="
+          color: white;
+          font-size: 80px;
+          text-align: center;
+          font-family: Arial, sans-serif;
+          max-width: 80%;
+          cursor: pointer;
+          font-family: &quot;Press Start 2P&quot;;
+        "
+      >
+        Begin?
+      </p>
+    </div>
+    <script>
+      document.addEventListener("keydown", () => {
+        document.getElementById("overlay").style.display = "none";
+      });
+    </script>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: #111;
+        overflow: hidden;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+      }
+    </style>
+  </head>
+  <body>
+    <script type="module">
+      import kaplay from "https://unpkg.com/kaplay@3001.0.0-alpha.20/dist/kaboom.mjs";
+
+      // canvas setup. height is always 600 and the width changes with the window (but it's capped)
+      const LOGICAL_H = 600;
+      const viewAspect = Math.min(
+        Math.max(window.innerWidth / window.innerHeight, 4 / 3),
+        21 / 9,
+      );
+      kaplay({
+        width: Math.round(LOGICAL_H * viewAspect),
+        height: LOGICAL_H,
+        letterbox: true,
+        background: "#211f30",
+      });
+
+      // ---- timers for each level ----
+      const LEVEL_TIMERS = [60, 30, 50, 40, 50, 50, 35, 60, 50, 50, 75];
+
+      // continuous mode: one timer for the whole run. it starts as all the level
+      // timers above added together (level 0 is just the menu background so it
+      // doesn't count) minus a number i hard coded to my own taste.
+
+      const CONTINUOUS_TIME_REDUCTION = 70;
+
+      function continuousStartTime() {
+        let total = 0;
+        for (let i = 1; i < LEVELS.length; i++) total += LEVEL_TIMERS[i] ?? 60;
+        return Math.max(1, total - CONTINUOUS_TIME_REDUCTION);
+      }
+      // a run keeps the shared timer and how long each level took
+      function newRun() {
+        return { timeLeft: continuousStartTime(), splits: [] };
+      }
+
+      // ---- loading assets ----
+      loadSprite(
+        "player_idle",
+        "assets/Main Characters/Ninja Frog/Idle (32x32).png",
+        {
+          sliceX: 11,
+          sliceY: 1,
+          anims: { anim: { from: 0, to: 10, loop: true, speed: 24 } },
+        },
+      );
+      loadSprite(
+        "player_run",
+        "assets/Main Characters/Ninja Frog/Run (32x32).png",
+        {
+          sliceX: 12,
+          sliceY: 1,
+          anims: { anim: { from: 0, to: 11, loop: true, speed: 24 } },
+        },
+      );
+      loadSprite(
+        "player_jump",
+        "assets/Main Characters/Ninja Frog/Jump (32x32).png",
+        {
+          sliceX: 1,
+          sliceY: 1,
+          anims: { anim: { from: 0, to: 0, loop: true, speed: 24 } },
+        },
+      );
+      loadSprite(
+        "player_double_jump",
+        "assets/Main Characters/Ninja Frog/Double Jump (32x32).png",
+        {
+          sliceX: 6,
+          sliceY: 1,
+          anims: { anim: { from: 0, to: 5, loop: true, speed: 24 } },
+        },
+      );
+      loadSprite(
+        "player_fall",
+        "assets/Main Characters/Ninja Frog/Fall (32x32).png",
+        {
+          sliceX: 1,
+          sliceY: 1,
+          anims: { anim: { from: 0, to: 0, loop: true, speed: 24 } },
+        },
+      );
+      loadSprite(
+        "player_hit",
+        "assets/Main Characters/Ninja Frog/Hit (32x32).png",
+        {
+          sliceX: 7,
+          sliceY: 1,
+          anims: { anim: { from: 0, to: 6, loop: false, speed: 12 } },
+        },
+      );
+      loadSprite(
+        "player_wall_jump",
+        "assets/Main Characters/Ninja Frog/Wall Jump (32x32).png",
+        {
+          sliceX: 5,
+          sliceY: 1,
+          anims: { anim: { from: 0, to: 4, loop: true, speed: 24 } },
+        },
+      );
+      loadSprite("trampoline_idle", "assets/Traps/Trampoline/Idle.png");
+      loadSprite(
+        "trampoline_jump",
+        "assets/Traps/Trampoline/Jump (28x28).png",
+        {
+          sliceX: 8,
+          sliceY: 1,
+          anims: { anim: { from: 0, to: 7, loop: false, speed: 20 } },
+        },
+      );
+      loadSprite("spikes", "assets/Traps/Spikes/Idle.png");
+      loadSprite(
+        "moving_platform",
+        "assets/Traps/Platforms/Grey On (32x8).png",
+        {
+          sliceX: 8,
+          sliceY: 1,
+          anims: { anim: { from: 0, to: 7, loop: true, speed: 16 } },
+        },
+      );
+      loadSprite("saw", "assets/Traps/Saw/On (38x38).png", {
+        sliceX: 8,
+        sliceY: 1,
+        anims: { anim: { from: 0, to: 7, loop: true, speed: 30 } },
+      });
+      loadSprite("falling_off", "assets/Traps/Falling Platforms/Off.png");
+      loadSprite(
+        "falling_on",
+        "assets/Traps/Falling Platforms/On (32x10).png",
+        {
+          sliceX: 4,
+          sliceY: 1,
+          anims: { anim: { from: 0, to: 3, loop: true, speed: 20 } },
+        },
+      );
+
+      loadSprite("logo", "assets/logo.png");
+      loadSprite("wood-left", "assets/Terrain/wood-left.png");
+      loadSprite("wood-right", "assets/Terrain/wood-right.png");
+      loadSprite("stone-bottom", "assets/Terrain/stone-bottom.png");
+      loadSprite("stone-top", "assets/Terrain/stone-top.png");
+      loadSprite("wood-top", "assets/Terrain/wood-top.png");
+      loadSprite("wood-bottom", "assets/Terrain/wood-bottom.png");
+      loadSprite("stone-left", "assets/Terrain/stone-left.png");
+      loadSprite("stone-right", "assets/Terrain/stone-right.png");
+      loadSprite("leaf-left", "assets/Terrain/leaf-left.png");
+      loadSprite("leaf-right", "assets/Terrain/leaf-right.png");
+      loadSprite("dirt", "assets/Terrain/dirt.png");
+
+      for (const c of [
+        "blue",
+        "brown",
+        "gray",
+        "green",
+        "pink",
+        "purple",
+        "yellow",
+      ]) {
+        loadSprite(`bg_${c}`, `assets/Background/${c}.png`);
+      }
+
+      loadSprite(
+        "flag",
+        "assets/Items/Checkpoints/Checkpoint/Checkpoint (Flag Idle)(64x64).png",
+        {
+          sliceX: 10,
+          sliceY: 1,
+          anims: { anim: { from: 0, to: 9, loop: true, speed: 30 } },
+        },
+      );
+      loadSprite("platform", "assets/Terrain/platform.png");
+      loadSprite("apple", "assets/Items/Fruits/Apple.png", {
+        sliceX: 17,
+        sliceY: 1,
+        anims: { anim: { from: 0, to: 16, loop: true, speed: 30 } },
+      });
+
+      loadSpriteAtlas("assets/Terrain/Terrain (16x16).png", {
+        stone: { x: 0, y: 0, width: 48, height: 48 },
+        wood: { x: 0, y: 64, width: 48, height: 48 },
+        foliage: { x: 0, y: 128, width: 48, height: 48 },
+        bronze: { x: 208, y: 16, width: 32, height: 32 },
+        iron: { x: 208, y: 80, width: 32, height: 32 },
+        copper: { x: 208, y: 144, width: 32, height: 32 },
+        gold: { x: 288, y: 144, width: 32, height: 32 },
+        brick: { x: 272, y: 64, width: 48, height: 48 },
+        grass: { x: 96, y: 0, width: 48, height: 48 },
+      });
+
+      loadSound("bgm", "assets/music/music.mp3");
+      loadSound("apple", "assets/music/apple.mp3");
+      loadSound("bounce", "assets/music/bounce.mp3");
+      loadSound("lose", "assets/music/lose.mp3");
+      loadSound("start", "assets/music/start.mp3");
+      loadSound("shop", "assets/music/shop.mp3");
+      loadSound("hit", "assets/music/hit.mp3");
+      loadSound("victory", "assets/music/victory.mp3");
+      let musicHandle = null;
+
+      function unlockAudio() {
+        if (!musicHandle) {
+          musicHandle = play("bgm", { loop: true, volume: 0.15 });
+        }
+        // only need this once so remove the listeners after the first click/key
+        window.removeEventListener("click", unlockAudio);
+        window.removeEventListener("keydown", unlockAudio);
+      }
+
+      window.addEventListener("click", unlockAudio);
+      window.addEventListener("keydown", unlockAudio);
+
+      // ---- block types ----
+      const CLIMBABLE_BLOCKS = {
+        S: "stone",
+        W: "wood",
+        G: "grass",
+        F: "foliage",
+        D: "dirt",
+        R: "brick",
+        C: "copper",
+        Z: "bronze",
+        I: "iron",
+        O: "gold",
+      };
+      const FRAME_BLOCKS = {
+        T: "stone-top",
+        "=": "wood-top",
+        B: "stone-bottom",
+        _: "wood-bottom",
+      };
+      const SOLID_SPRITES = { ...CLIMBABLE_BLOCKS, ...FRAME_BLOCKS };
+
+      function solidTiles(size) {
+        const out = {};
+        for (const [ch, name] of Object.entries(SOLID_SPRITES)) {
+          const tags =
+            ch in CLIMBABLE_BLOCKS ? ["ground", "climbable"] : ["ground"];
+          out[ch] = () => [
+            sprite(name, { width: size, height: size }),
+            area({ width: size, height: size }),
+            body({ isStatic: true }),
+            ...tags,
+          ];
+        }
+        return out;
+      }
+
+      const LEVEL_BG = [
+        "bg_yellow",
+        "bg_green",
+        "bg_green",
+        "bg_purple",
+        "bg_brown",
+        "bg_blue",
+        "bg_pink",
+        "bg_gray",
+        "bg_yellow",
+        "bg_gray",
+        "bg_brown",
+      ];
+      const SIDE_WALL_SHIFT = 0;
+      const BG_TILE = 64;
+      const BG_SCROLL_SPEED = 30;
+
+      function addScrollingBg(name, x, y, w, h) {
+        return add([
+          z(-10),
+          {
+            draw() {
+              const S = BG_TILE;
+              const off = (time() * BG_SCROLL_SPEED) % S;
+              for (let ty = y + off - S; ty < y + h; ty += S) {
+                const top = Math.max(ty, y);
+                const bot = Math.min(ty + S, y + h);
+                if (bot <= top) continue;
+                for (let tx = x; tx < x + w; tx += S) {
+                  const right = Math.min(tx + S, x + w);
+                  drawSprite({
+                    sprite: name,
+                    pos: vec2(tx, top),
+                    width: right - tx,
+                    height: bot - top,
+                    quad: new Quad(
+                      0,
+                      (top - ty) / S,
+                      (right - tx) / S,
+                      (bot - top) / S,
+                    ),
+                  });
+                }
+              }
+            },
+          },
+        ]);
+      }
+
+      // ---- level maps ----
+      const LEVELS = [
+        [
+          "================",
+          "ZC            CZ",
+          "C              C",
+          "[              ]",
+          "[              ]",
+          "[              ]",
+          "[              ]",
+          "[              ]",
+          "[              ]",
+          "[              ]",
+          "[              ]",
+          "[              ]",
+          "[              ]",
+          "C              C",
+          "ZC            CZ",
+          "________________",
+        ],
+
+        // map 1: the meadow walk
+        [
+          "================",
+          "(              )",
+          "(             +G",
+          "(             GD",
+          "(             DD",
+          "(            GDZ",
+          "(           GDZS",
+          "(          $DZSS",
+          "G@   $     GDSKK",
+          "DG  FF     DZSKO",
+          "ZDGGGGGX  GZSKOO",
+          "________________",
+        ],
+        // map 2
+        [
+          "================",
+          "(              )",
+          "(      $     + )",
+          "(    GFGG    D )",
+          "(              )",
+          "(  DGGFGG      )",
+          "( $            )",
+          "(      GGFG    )",
+          "(              )",
+          "(  GFG       $ )",
+          "(     ^^       )",
+          "(    DGGFGD    )",
+          "(              )",
+          "(            VF)",
+          "(@             )",
+          "________________",
+        ],
+        // map 3
+        [
+          "TTTTTTTTTT",
+          "<        >",
+          "<        >",
+          "<    +   >",
+          "<  IOOI  >",
+          "<        >",
+          "<        >",
+          "<        >",
+          "<    X   >",
+          "<  CZCI  >",
+          "<        >",
+          "< X  $   >",
+          "< IOZOI  >",
+          "<        >",
+          "< @      >",
+          "BBBBBBBBBB",
+        ],
+        // map 4
+        [
+          "================",
+          "[              ]",
+          "[          +   ]",
+          "[         IZCI ]",
+          "[              ]",
+          "[              ]",
+          "[              ]",
+          "[              ]",
+          "[              ]",
+          "[              ]",
+          "[  CZIC        ]",
+          "[              ]",
+          "[      $       ]",
+          "[        ZCOZ  ]",
+          "[              ]",
+          "[  $           ]",
+          "[CZIC          ]",
+          "[ @            ]",
+          "________________",
+        ],
+        // map 5
+        [
+          "TTTTTTTTTTTTTTT",
+          "[             ]",
+          "[             ]",
+          "[        +    ]",
+          "[        O    ]",
+          "[        R    ]",
+          "[        I    ]",
+          "[        RPPP ]",
+          "[        I $  ]",
+          "[        R    ]",
+          "[        I    ]",
+          "[      PPR    ]",
+          "[        RI   ]",
+          "[        IR   ]",
+          "[       SRI   ]",
+          "[     SSRIR   ]",
+          "[    SRIRIRS  ]",
+          "[M@ SRIRIRSRSM]",
+          "[SRSRIRSRIRSRS]",
+          "BBBBBBBBBBBBBBB",
+        ],
+        // map 6
+        [
+          "=======",
+          "(     )",
+          "(  ^ +)",
+          "( GFOFG",
+          "(     )",
+          "(     )",
+          "(     )",
+          "(     )",
+          "( ^   )",
+          "GOFOG )",
+          "(     )",
+          "(     )",
+          "(     )",
+          "(     )",
+          "(@    )",
+          "_______",
+        ],
+        // map 7
+        [
+          "==============================",
+          "<@                           >",
+          "SSSSPPPPSSPPPPSSPPPPSSPPPPS  >",
+          "<                            >",
+          "<  SSPPPPSSPPPPSSPPPPSSPPPPSSS",
+          "<                            >",
+          "SSSSPPPPSSPPPPSSPPPPSSPPPPS  >",
+          "<   S   S                    >",
+          "<   S   S $ S     S   S   S  >",
+          "<        KKKS     S   S   S  >",
+          "<  SSPPPPSSPPPPSSPPPPSSPPPSSSS",
+          "<                            >",
+          "SSSSPPPPSSPPPPSSPPPPSSSPPPS  >",
+          "<             S       S      >",
+          "<             S       S      >",
+          "<         S   S   S   S   S  >",
+          "<       PPS   S   S   S   S  >",
+          "<         S       S       S  >",
+          "<        $S       S       S  >",
+          "<       PPS       S       S  >",
+          "<+        S       S       S  >",
+          "______________________________",
+        ],
+        // map 8
+        [
+          "TTTTTTTTTTTTTT",
+          "<            >",
+          "<+           >",
+          "ROOOOO       >",
+          "RRIRIR       >",
+          "RR  IR MRIPPIR",
+          "RR $IR  RI $IR",
+          "RRIRIRM IRIRRR",
+          "RIRIRI  RIRIIR",
+          "RRIRI    IRIRR",
+          "RRIRI      RIR",
+          "RRIR        IR",
+          "<            >",
+          "<  @         >",
+          "BBBBBBBBBBBBBB",
+        ],
+        // map 9:
+        [
+          "==============",
+          "(            )",
+          "(          + )",
+          "( O        I )",
+          "( O    $   I )",
+          "(            )",
+          "( Z        C )",
+          "( Z        C )",
+          "(  MM        )",
+          "(            )",
+          "( I    $   O )",
+          "( I        O )",
+          "( @ ^^^^^^  X)",
+          "______________",
+        ],
+        // map 10: possible impossible
+        [
+          "TTTTTTTTTTTTTTTTT",
+          "<               >",
+          "< G  G  G   G   >",
+          "< I  I  I   I^^ >",
+          "< D     DK KDPP >",
+          "< S  S  S P S   >",
+          "< D  D  D $$D ^^>",
+          "< I^^I^^I   I PP>",
+          "<  PP PPD $$D   >",
+          "WKKKKKK SICOWKKKW",
+          "<      VDCOW    >",
+          "<     P I COW   >",
+          "<       D  ZZ   >",
+          "<   V ^KS V ZD  >",
+          "<    ^Z D ZV ZD >",
+          "< P ^Z  I CZV DD>",
+          "<@^^Z  $D+OCZV  >",
+          "BBBBBBBBBBBBBBBBB",
+        ],
+      ];
+
+      // ---- moving platforms (M) and saws (X) settings ----
+      // the key is the level number, then "row,col" of the tile in that level's
+      // map (counting from 0 at the top left).
+
+      const MOVER_DEFAULTS = {
+        M: { range: 4, speed: 2, axis: "x" },
+        X: { range: 0, speed: 0, axis: "x" },
+      };
+      const MOVER_CONFIG = {
+        3: {
+          "8,5": { range: -1.5, speed: 2 },
+          "11,2": { range: 3.5, speed: 2.5 },
+        },
+        9: {
+          "8,4": { range: 6, speed: 2, axis: "x" },
+          "8,3": { range: 6, speed: 2, axis: "x" },
+        },
+        8: {
+          "5,7": { range: -1, speed: 2, axis: "x" },
+          "7,6": { range: 1, speed: 2, axis: "x" },
+        },
+        5: {
+          "17,1": { range: -15, speed: 2, axis: "y" },
+          "17,13": { range: -15, speed: 2, axis: "y" },
+        },
+        1: {
+          "10,7": { range: 1.5, speed: 2.5 },
+        },
+      };
+
+      // ---- layout and ui stuff ----
+      const HUD_W = Math.round(width() * 0.3);
+      const GAME_W = width() - HUD_W;
+      const LEVEL_NAMES = [
+        "Display",
+        "The Meadow Walk",
+        "Opening Deposit",
+        "The Vault",
+        "Clockwork Ascent",
+        "The Skyscraper",
+        "Trampoline Park",
+        "The Need for Speed",
+        "Wall Street",
+        "Precious Metals",
+        "Possible Impossible",
+      ];
+      const COL = {
+        panel: rgb(21, 19, 31),
+        panelHeader: rgb(29, 26, 43),
+        edge: rgb(70, 62, 105),
+        text: rgb(235, 230, 245),
+        dim: rgb(140, 135, 165),
+        gold: rgb(255, 205, 90),
+        green: rgb(120, 220, 140),
+        red: rgb(255, 110, 110),
+        grid: rgb(40, 37, 58),
+        btn: rgb(42, 38, 62),
+        btnOwned: rgb(32, 48, 38),
+        btnLocked: rgb(50, 32, 34),
+        btnShadow: rgb(10, 9, 15),
+      };
+
+      function lighten(c, amt) {
+        return rgb(
+          Math.min(255, c.r + amt),
+          Math.min(255, c.g + amt),
+          Math.min(255, c.b + amt),
+        );
+      }
+
+      function fitGrid(cols, rows) {
+        const tile = Math.floor(Math.min(GAME_W / cols, height() / rows));
+        return {
+          tile,
+          x: Math.round(HUD_W + (GAME_W - cols * tile) / 2),
+          y: Math.round((height() - rows * tile) / 2),
+        };
+      }
+
+      // left side hud panel, every scene uses this one
+      function drawHudBase() {
+        add([
+          rect(HUD_W, height()),
+          pos(0, 0),
+          color(COL.panel),
+          z(100),
+          fixed(),
+        ]);
+        // soft shadow on the right edge
+        const SHADOW_W = 14;
+        for (let i = 0; i < SHADOW_W; i++) {
+          add([
+            rect(1, height()),
+            pos(HUD_W + i, 0),
+            color(rgb(0, 0, 0)),
+            opacity(0.62 * (1 - i / SHADOW_W)),
+            z(100),
+            fixed(),
+          ]);
+        }
+      }
+
+      function label(str, y, size = 11, col = COL.dim, zIndex = 102) {
+        return add([
+          text(str, { size, width: HUD_W - 28 }),
+          pos(14, y),
+          color(col),
+          z(zIndex),
+          fixed(),
+        ]);
+      }
+
+      function hudHeader(title, eyebrow = null, accent = COL.gold) {
+        const barH = eyebrow ? 56 : 42;
+        const elements = [
+          add([
+            rect(HUD_W, barH),
+            pos(0, 0),
+            color(COL.panelHeader),
+            z(101),
+            fixed(),
+          ]),
+          add([
+            rect(HUD_W, 3),
+            pos(0, barH - 3),
+            color(accent),
+            z(102),
+            fixed(),
+          ]),
+        ];
+        if (eyebrow) {
+          elements.push(
+            add([
+              text(eyebrow, { size: 10, width: HUD_W - 28 }),
+              pos(14, 9),
+              color(accent),
+              z(103),
+              fixed(),
+            ]),
+          );
+          elements.push(
+            add([
+              text(title, { size: 17, width: HUD_W - 28 }),
+              pos(14, 26),
+              color(COL.text),
+              z(103),
+              fixed(),
+            ]),
+          );
+        } else {
+          elements.push(
+            add([
+              text(title, { size: 17, width: HUD_W - 28 }),
+              pos(14, barH / 2),
+              anchor("left"),
+              color(COL.text),
+              z(103),
+              fixed(),
+            ]),
+          );
+        }
+        return { elements, bodyY: barH + 14 };
+      }
+
+      function hudFooter(str) {
+        const lines = str.split("\n").length;
+        const barH = 22 + lines * 13;
+        const y = height() - barH;
+        const elements = [
+          add([
+            rect(HUD_W, barH),
+            pos(0, y),
+            color(COL.panelHeader),
+            z(101),
+            fixed(),
+          ]),
+          add([rect(HUD_W, 2), pos(0, y), color(COL.edge), z(102), fixed()]),
+          add([
+            text(str, { size: 10, width: HUD_W - 28 }),
+            pos(14, y + 11),
+            color(COL.dim),
+            z(103),
+            fixed(),
+          ]),
+        ];
+        return { elements, y };
+      }
+
+      function sectionLabel(str, y, accent = COL.gold) {
+        const elements = [
+          add([
+            rect(HUD_W - 28, 1),
+            pos(14, y + 14),
+            color(COL.edge),
+            z(102),
+            fixed(),
+          ]),
+          add([
+            text(str, { size: 9, width: HUD_W - 28 }),
+            pos(14, y),
+            color(accent),
+            z(103),
+            fixed(),
+          ]),
+        ];
+        return { elements, nextY: y + 22 };
+      }
+
+      function menuList(labels, y, gap, onPick, onFocus, size = 15) {
+        let sel = 0;
+        const items = labels.map((l, i) =>
+          add([
+            text(l, { size, width: HUD_W - 28 }),
+            pos(14, y + i * gap),
+            color(COL.dim),
+            area(),
+            z(103),
+            fixed(),
+          ]),
+        );
+        const paint = () =>
+          items.forEach((it, i) => {
+            it.text = (i === sel ? "> " : "  ") + labels[i];
+            it.color = i === sel ? COL.gold : COL.dim;
+          });
+        const focus = (i) => {
+          sel = (i + items.length) % items.length;
+          paint();
+          if (onFocus) onFocus(sel);
+        };
+        focus(0);
+        if (document.getElementById("overlay").style.display === "none") {
+          onKeyPress("up", () => focus(sel - 1));
+          onKeyPress("w", () => focus(sel - 1));
+          onKeyPress("down", () => focus(sel + 1));
+          onKeyPress("s", () => focus(sel + 1));
+          onKeyPress("enter", () => onPick(sel));
+          onKeyPress("space", () => onPick(sel));
+        }
+        items.forEach((it, i) => {
+          it.onHover(() => focus(i));
+          it.onClick(() => onPick(i));
+        });
+        return items;
+      }
+
+      function showPreview(idx) {
+        // show level preview on the right side of the screen during level select
+        const map = LEVELS[idx];
+        const f = fitGrid(map[0].length, map.length);
+        const T = f.tile;
+        const spr =
+          (name, h = T) =>
+          () => [sprite(name, { width: T, height: h })];
+        const anim = (name) => () => [
+          sprite(name, { width: T, height: T, anim: "anim" }),
+        ];
+        const sideSpr = (name, tag) => () => [
+          sprite(name, { width: T, height: T }),
+          tag,
+        ];
+        const bg = addScrollingBg(
+          LEVEL_BG[idx],
+          f.x,
+          f.y,
+          map[0].length * T,
+          map.length * T,
+        );
+        const lvl = addLevel(map, {
+          tileWidth: T,
+          tileHeight: T,
+          pos: vec2(f.x, f.y),
+          tiles: {
+            "[": spr("wood-left"),
+            "]": spr("wood-right"),
+            "(": sideSpr("leaf-left", "sideL"),
+            ")": sideSpr("leaf-right", "sideR"),
+            "<": sideSpr("stone-left", "sideL"),
+            ">": sideSpr("stone-right", "sideR"),
+            ...Object.fromEntries(
+              Object.entries(SOLID_SPRITES).map(([k, n]) => [k, spr(n)]),
+            ),
+            P: spr("platform", T),
+            "^": spr("spikes"),
+            M: () => [
+              sprite("moving_platform", {
+                width: T,
+                height: T / 4,
+                anim: "anim",
+              }),
+            ],
+            X: () => [
+              sprite("saw", { width: T * 1.5, height: T * 1.5, anim: "anim" }),
+              z(-1),
+              "saw",
+            ],
+            V: () => [
+              sprite("falling_off", {
+                width: T,
+                height: T / 2.5,
+              }),
+            ],
+            K: spr("brick"),
+            "@": () => [
+              sprite("player_idle", {
+                width: T,
+                height: T,
+                anim: "anim",
+              }),
+            ],
+            $: () => [
+              sprite("apple", { anim: "anim" }),
+              scale(T / 32),
+              anchor("center"),
+            ],
+            "+": anim("flag"),
+          },
+        });
+        for (const w of lvl.get("sideL")) w.pos.x -= T * SIDE_WALL_SHIFT;
+        for (const w of lvl.get("sideR")) w.pos.x += T * SIDE_WALL_SHIFT;
+        for (const w of lvl.get("saw")) w.pos.y += T * 0.25;
+        return [bg, lvl];
+      }
+
+      // empty frame on the right side for the start menu: a big square grid
+      // with the logo bobbing up and down in the middle
+      function drawRightPlaceholder() {
+        const cx = HUD_W + GAME_W / 2;
+        const cy = height() / 2;
+        const margin = 40;
+        const side = Math.min(GAME_W, height()) - margin * 2;
+        const gx = cx - side / 2;
+        const gy = cy - side / 2;
+        const cell = Math.round(side / 14);
+
+        // logo that floats and bobs
+        const logo = add([
+          sprite("logo", { width: side * 0.9, height: side * 0.9 }),
+          pos(cx, cy),
+          anchor("center"),
+          scale(1),
+          z(7),
+          fixed(),
+        ]);
+        const maxDim = side * 0.9;
+        const fit = Math.min(maxDim / logo.width, maxDim / logo.height, 1);
+        logo.scale = vec2(fit);
+        const baseY = cy;
+        logo.onUpdate(() => {
+          logo.pos.y = baseY + Math.sin(time() * 2) * 10;
+        });
+      }
+
+      // ---- main game scene ----
+      scene("game", (levelIndex = 0, run = null) => {
+        const mapLayout = LEVELS[levelIndex];
+        const numRows = mapLayout.length;
+        const numCols = mapLayout[0].length;
+
+        const fit = fitGrid(numCols, numRows);
+        const TILE_SIZE = fit.tile;
+        const offsetX = fit.x;
+        const offsetY = fit.y;
+
+        const gridWidth = numCols * TILE_SIZE;
+        const gridHeight = numRows * TILE_SIZE;
+
+        addScrollingBg(
+          LEVEL_BG[levelIndex],
+          offsetX,
+          offsetY,
+          gridWidth,
+          gridHeight,
+        );
+
+        setGravity(TILE_SIZE * 38);
+        let moveSpeed = TILE_SIZE * 5.5;
+        let jumpForce = TILE_SIZE * 14.5;
+
+        // timer setup. in a continuous run the timer is shared between levels so
+        // we start with whatever was left from the last level
+        let timeLeft = run ? run.timeLeft : (LEVEL_TIMERS[levelIndex] ?? 60.0);
+        let elapsed = 0; // actual seconds spent in this level, used on the win screen
+        let levelFinished = false;
+        let maxJumps = 1;
+        let jumpsRemaining = 1;
+        let hasDoubleJump = false;
+        let hasDash = false;
+        let hasWallJump = false;
+        let hasGroundPound = false;
+        let hasAppleMagnet = false;
+        let isGroundPounding = false;
+        let isDashing = false;
+        let dashCooldownUntil = 0;
+        let lastSpikeHit = -1;
+
+        let isGameOver = false;
+        let hitUntil = 0;
+
+        const TRAMPOLINE_BOOST = 1.5;
+        const WALL_JUMP_FORCE = TILE_SIZE * 14.5;
+        const WALL_KICK_SPEED = TILE_SIZE * 5.5;
+        const WALL_KICK_DIST = TILE_SIZE * 1.1;
+        const WALL_KICK_TIME = WALL_KICK_DIST / WALL_KICK_SPEED;
+        const DASH_SPEED = TILE_SIZE * 16;
+        const DASH_DURATION = 0.18;
+        const DASH_COOLDOWN = 0.6;
+
+        const woodPostWidth = TILE_SIZE * (9 / 32);
+        const woodRightOffset = TILE_SIZE * (23 / 32);
+
+        const PX = TILE_SIZE / 32;
+        const HIT_W = 23 * PX;
+        const HIT_H = 26 * PX;
+
+        // build the level from the map
+        const level = addLevel(mapLayout, {
+          tileWidth: TILE_SIZE,
+          tileHeight: TILE_SIZE,
+          pos: vec2(offsetX, offsetY),
+          tiles: {
+            "[": () => [
+              sprite("wood-left", { width: TILE_SIZE, height: TILE_SIZE }),
+              area({ shape: new Rect(vec2(0, 0), woodPostWidth, TILE_SIZE) }),
+              body({ isStatic: true }),
+              "ground",
+            ],
+            "]": () => [
+              sprite("wood-right", { width: TILE_SIZE, height: TILE_SIZE }),
+              area({
+                shape: new Rect(
+                  vec2(woodRightOffset, 0),
+                  woodPostWidth,
+                  TILE_SIZE,
+                ),
+              }),
+              body({ isStatic: true }),
+              "ground",
+            ],
+            "(": () => [
+              sprite("leaf-left", { width: TILE_SIZE, height: TILE_SIZE }),
+              area({ shape: new Rect(vec2(0, 0), woodPostWidth, TILE_SIZE) }),
+              body({ isStatic: true }),
+              "ground",
+              "sideL",
+            ],
+            ")": () => [
+              sprite("leaf-right", { width: TILE_SIZE, height: TILE_SIZE }),
+              area({
+                shape: new Rect(
+                  vec2(woodRightOffset, 0),
+                  woodPostWidth,
+                  TILE_SIZE,
+                ),
+              }),
+              body({ isStatic: true }),
+              "ground",
+              "sideR",
+            ],
+            "<": () => [
+              sprite("stone-left", { width: TILE_SIZE, height: TILE_SIZE }),
+              area({ shape: new Rect(vec2(0, 0), woodPostWidth, TILE_SIZE) }),
+              body({ isStatic: true }),
+              "ground",
+              "sideL",
+            ],
+            ">": () => [
+              sprite("stone-right", { width: TILE_SIZE, height: TILE_SIZE }),
+              area({
+                shape: new Rect(
+                  vec2(woodRightOffset, 0),
+                  woodPostWidth,
+                  TILE_SIZE,
+                ),
+              }),
+              body({ isStatic: true }),
+              "ground",
+              "sideR",
+            ],
+            ...solidTiles(TILE_SIZE),
+            P: () => [
+              sprite("platform", { width: TILE_SIZE, height: TILE_SIZE }),
+              area({ shape: new Rect(vec2(0, 0), TILE_SIZE, 4) }),
+              body({ isStatic: true }),
+              "platform",
+              "oneWay",
+            ],
+            "^": () => [
+              sprite("spikes", {
+                width: TILE_SIZE,
+                height: TILE_SIZE,
+              }),
+              area({
+                shape: new Rect(
+                  vec2(0, TILE_SIZE / 2),
+                  TILE_SIZE,
+                  TILE_SIZE / 2,
+                ),
+              }),
+              "spike",
+            ],
+            // moving platform. 1 tile wide and goes back and forth
+            M: () => {
+              const pw = TILE_SIZE;
+              const ph = pw / 4;
+              return [
+                sprite("moving_platform", {
+                  width: pw,
+                  height: ph,
+                  anim: "anim",
+                }),
+                area({ shape: new Rect(vec2(0, 0), pw, ph * 0.5) }),
+                body({ isStatic: true, jumpThrough: true }),
+                "movingPlatform",
+              ];
+            },
+            // saw
+            X: () => {
+              const S = TILE_SIZE * 1.5; // 1.5x a normal tile
+              const inset = S * 0.15;
+              return [
+                sprite("saw", {
+                  width: S,
+                  height: S,
+                  anim: "anim",
+                }),
+                z(-1), // drawn behind the ground so the bottom half is hidden
+                area({
+                  shape: new Rect(
+                    vec2(inset, inset),
+                    S - inset * 2,
+                    S - inset * 2,
+                  ),
+                }),
+                "saw",
+              ];
+            },
+            V: () => [
+              sprite("falling_off", {
+                width: TILE_SIZE,
+                height: TILE_SIZE / 2.5,
+              }),
+              area({ width: TILE_SIZE, height: TILE_SIZE / 2.5 }),
+              body({ isStatic: true }),
+              "fallingPlatform",
+              "ground",
+              { fpWidth: TILE_SIZE, fpHeight: TILE_SIZE / 2.5 },
+            ],
+            K: () => [
+              sprite("brick", { width: TILE_SIZE, height: TILE_SIZE }),
+              area({ width: TILE_SIZE, height: TILE_SIZE }),
+              body({ isStatic: true }),
+              "cracked",
+              "ground",
+            ],
+            "@": () => [
+              sprite("player_idle", {
+                width: TILE_SIZE,
+                height: TILE_SIZE,
+                anim: "anim",
+              }),
+              area({ shape: new Rect(vec2(0, 0), HIT_W, HIT_H) }),
+              body(),
+              anchor("bot"),
+              "player",
+            ],
+            $: () => [
+              sprite("apple", { anim: "anim" }),
+              scale(TILE_SIZE / 32),
+              area(),
+              anchor("center"),
+              "timePickup",
+            ],
+            "+": () => [
+              sprite("flag", {
+                anim: "anim",
+                width: TILE_SIZE,
+                height: TILE_SIZE,
+              }),
+              area({
+                shape: new Rect(
+                  vec2(TILE_SIZE * 0.28, TILE_SIZE * 0.1),
+                  TILE_SIZE * 0.44,
+                  TILE_SIZE * 0.8,
+                ),
+              }),
+              "goal",
+            ],
+          },
+        });
+
+        {
+          const sh = TILE_SIZE * SIDE_WALL_SHIFT;
+          for (const w of level.get("sideL")) w.pos.x -= sh;
+          for (const w of level.get("sideR")) w.pos.x += sh;
+        }
+
+        // set up the moving platforms and saws
+        const usedMoverKeys = new Set();
+        function setupMover(obj, kind) {
+          const col = Math.round(obj.pos.x / TILE_SIZE);
+          const row = Math.round(obj.pos.y / TILE_SIZE);
+          const key = `${row},${col}`;
+          usedMoverKeys.add(key);
+          const cfg = {
+            ...MOVER_DEFAULTS[kind],
+            ...(MOVER_CONFIG[levelIndex]?.[key] ?? {}),
+          };
+          if (kind === "X") obj.pos.y += TILE_SIZE * 0.25;
+          obj.moverAxis = cfg.axis;
+          obj.moverSpeed = cfg.speed * TILE_SIZE;
+          const start = obj.pos[cfg.axis];
+          const end = start + cfg.range * TILE_SIZE;
+          obj.moverLo = Math.min(start, end);
+          obj.moverHi = Math.max(start, end);
+          obj.moverDir = cfg.range < 0 ? -1 : 1;
+        }
+        for (const mp of level.get("movingPlatform")) setupMover(mp, "M");
+        for (const sw of level.get("saw")) setupMover(sw, "X");
+
+        function updateMover(obj) {
+          const a = obj.moverAxis;
+          obj.pos[a] += obj.moverDir * obj.moverSpeed * dt();
+          if (obj.pos[a] >= obj.moverHi) {
+            obj.pos[a] = obj.moverHi;
+            obj.moverDir = -1;
+          } else if (obj.pos[a] <= obj.moverLo) {
+            obj.pos[a] = obj.moverLo;
+            obj.moverDir = 1;
+          }
+        }
+
+        const player = level.get("player")[0];
+
+        player.pos.x += TILE_SIZE / 2;
+        player.pos.y += TILE_SIZE;
+
+        // one way platforms ("P"). they're only solid when you land on them from
+        // above. if you're going up, or already well below the top, the
+        // collision gets cancelled so you go right through.
+        player.onBeforePhysicsResolve((col) => {
+          const t = col.target;
+          if (!t.is("oneWay")) return;
+          const feetBelowTop = player.pos.y - t.pos.y;
+          // how far into the platform a falling player can be in one frame and still
+          // count as landing on top (needs to be big enough for ground pound speed)
+          const landingSlack = Math.max(
+            TILE_SIZE * 0.3,
+            player.vel.y * dt() * 1.5 + 2,
+          );
+          if (player.vel.y < 0 || feetBelowTop > landingSlack) {
+            col.preventResolution();
+          }
+        });
+        let playerState = "idle";
+        let onSecondJump = false;
+        let isDying = false;
+        let wallSide = 0;
+        let lastWallTouch = -1;
+        let wallKickUntil = 0;
+        let wallKickDir = 0;
+        const wallActive = () =>
+          hasWallJump && wallSide !== 0 && time() - lastWallTouch < 0.1;
+        // keeps track of any solid block pushed against the player's left or right
+        // side (even without the wall jump upgrade) so walking can stop pushing
+        // into it. if we don't do this, holding the move key keeps shoving the
+        // player into the wall every frame, and if a jump happens on that exact
+        // frame the collision fix has to deal with a wall hit and a floor hit at
+        // the same time and the jump comes out lower, like there's a ceiling
+        let lastLeftWallTouch = -1;
+        let lastRightWallTouch = -1;
+        const BLOCKED_LEFT = () => time() - lastLeftWallTouch < 0.05;
+        const BLOCKED_RIGHT = () => time() - lastRightWallTouch < 0.05;
+
+        function setAnim(state) {
+          if (playerState === state) return;
+          playerState = state;
+          const wasFlipped = player.flipX;
+          player.use(
+            sprite(`player_${state}`, {
+              width: TILE_SIZE,
+              height: TILE_SIZE,
+              anim: "anim",
+            }),
+          );
+          player.flipX = wasFlipped;
+        }
+
+        function refreshAnim() {
+          if (isDying || time() < hitUntil) return;
+
+          if (player.isGrounded()) {
+            onSecondJump = false;
+            if (
+              isKeyDown("a") ||
+              isKeyDown("d") ||
+              isKeyDown("left") ||
+              isKeyDown("right")
+            ) {
+              setAnim("run");
+            } else {
+              setAnim("idle");
+            }
+          } else if (isGroundPounding) {
+            setAnim("fall");
+          } else if (player.isJumping()) {
+            setAnim(onSecondJump ? "double_jump" : "jump");
+          } else if (isWallSliding()) {
+            setAnim("wall_jump");
+            player.flipX = wallSide === -1;
+          } else if (player.isFalling()) {
+            setAnim("fall");
+          }
+        }
+
+        // scarcity pricing, prices go up when time is low
+        function getPrice(base) {
+          if (timeLeft >= 20) return base;
+          const scarcityFactor = 1 + ((20 - timeLeft) / 20) * 0.8;
+          return Math.ceil(base * scarcityFactor);
+        }
+
+        let hudElements = [];
+
+        // left hud panel
+        drawHudBase();
+
+        const header = hudHeader(
+          LEVEL_NAMES[levelIndex],
+          run
+            ? `CONTINUOUS ${levelIndex - 1}/${LEVELS.length - 2}`
+            : `LEVEL ${levelIndex - 1}`,
+        );
+        hudElements.push(...header.elements);
+
+        hudElements.push(label("TIME LEFT", header.bodyY, 9, COL.dim));
+        const timeText = label(
+          `${timeLeft.toFixed(1)}s`,
+          header.bodyY + 12,
+          24,
+          COL.text,
+        );
+        hudElements.push(timeText);
+
+        const SHOP_HDR_Y = header.bodyY + 44;
+        const shopHdr = sectionLabel(
+          "SHOP (Key/Click: Buy | Shift: Sell)",
+          SHOP_HDR_Y,
+        );
+        hudElements.push(...shopHdr.elements);
+
+        const SHOP = [
+          {
+            key: "1",
+            name: "Double Jump",
+            cost: 15,
+            refund: 8,
+            once: true,
+            owned: () => hasDoubleJump,
+            buy: () => {
+              hasDoubleJump = true;
+              maxJumps = 2;
+            },
+            sell: () => {
+              hasDoubleJump = false;
+              maxJumps = 1;
+            },
+          },
+          {
+            key: "2",
+            name: "Dash",
+            cost: 5,
+            refund: 2,
+            once: true,
+            owned: () => hasDash,
+            buy: () => {
+              hasDash = true;
+            },
+            sell: () => {
+              hasDash = false;
+            },
+          },
+          {
+            key: "3",
+            name: "Platform",
+            cost: 5,
+            once: false,
+            buy: () => {
+              const plankWidth = TILE_SIZE * 1.3;
+              const plankHeight = TILE_SIZE / 2.5;
+              level.add([
+                sprite("falling_off", {
+                  width: plankWidth,
+                  height: plankHeight,
+                }),
+                pos(player.pos.x, player.pos.y),
+                area({ width: plankWidth, height: plankHeight }),
+                body({ isStatic: true }),
+                anchor("top"),
+                "fallingPlatform",
+                "ground",
+                { fpWidth: plankWidth, fpHeight: plankHeight },
+              ]);
+            },
+          },
+          {
+            key: "4",
+            name: "Trampoline",
+            cost: 8,
+            once: false,
+            buy: () => {
+              const k = TILE_SIZE / 28;
+              level.add([
+                sprite("trampoline_idle", {
+                  width: TILE_SIZE,
+                  height: TILE_SIZE,
+                }),
+                pos(player.pos.x - TILE_SIZE / 2, player.pos.y - TILE_SIZE),
+                area({ shape: new Rect(vec2(2 * k, 17 * k), 23 * k, 4) }),
+                body({ isStatic: true, jumpThrough: true }),
+                "trampoline",
+              ]);
+            },
+          },
+          {
+            key: "5",
+            name: "Wall Jump",
+            cost: 12,
+            refund: 6,
+            once: true,
+            owned: () => hasWallJump,
+            buy: () => {
+              hasWallJump = true;
+            },
+            sell: () => {
+              hasWallJump = false;
+            },
+          },
+          {
+            key: "6",
+            name: "Ground Pound",
+            cost: 8,
+            refund: 4,
+            once: true,
+            owned: () => hasGroundPound,
+            buy: () => {
+              hasGroundPound = true;
+            },
+            sell: () => {
+              hasGroundPound = false;
+            },
+          },
+          {
+            key: "7",
+            name: "Apple Magnet",
+            cost: 12,
+            refund: 6,
+            once: true,
+            owned: () => hasAppleMagnet,
+            buy: () => {
+              hasAppleMagnet = true;
+            },
+            sell: () => {
+              hasAppleMagnet = false;
+            },
+          },
+        ];
+
+        const ROW_H = 24;
+        const ROW_STEP = ROW_H + 4;
+        const rowW = HUD_W - 28;
+        const badgeSize = ROW_H - 6;
+
+        const shopRows = SHOP.map((item, i) => {
+          const y = shopHdr.nextY + i * ROW_STEP;
+          // shadow sits a little down and to the right of the button so it looks
+          // raised, don't need a border for that
+          const shadow = add([
+            rect(rowW, ROW_H),
+            pos(16, y + 3),
+            color(COL.btnShadow),
+            z(100),
+            fixed(),
+          ]);
+          hudElements.push(shadow);
+          const bg = add([
+            rect(rowW, ROW_H),
+            pos(14, y),
+            color(COL.btn),
+            area(),
+            z(101),
+            fixed(),
+          ]);
+          bg.restColor = COL.btn;
+          bg.onClick(() => handleShopAction(i, isKeyDown("shift")));
+          bg.onHover(() => (bg.color = lighten(bg.restColor, 20)));
+          bg.onHoverEnd(() => (bg.color = bg.restColor));
+          const badge = add([
+            rect(badgeSize, badgeSize),
+            pos(17, y + 3),
+            color(COL.edge),
+            z(102),
+            fixed(),
+          ]);
+          const badgeText = add([
+            text(item.key, { size: 11 }),
+            pos(17 + badgeSize / 2, y + ROW_H / 2),
+            anchor("center"),
+            color(COL.text),
+            z(103),
+            fixed(),
+          ]);
+          const nameText = add([
+            text(item.name, { size: 11, width: rowW - badgeSize - 20 }),
+            pos(17 + badgeSize + 8, y + 4),
+            color(COL.text),
+            z(103),
+            fixed(),
+          ]);
+          const costText = add([
+            text("", { size: 9, width: rowW - badgeSize - 20 }),
+            pos(17 + badgeSize + 8, y + ROW_H - 10),
+            color(COL.dim),
+            z(103),
+            fixed(),
+          ]);
+          hudElements.push(bg, badge, badgeText, nameText, costText);
+          return { bg, badge, nameText, costText };
+        });
+
+        const shopBottomY = shopHdr.nextY + SHOP.length * ROW_STEP - 4 + 10;
+        const historyHdr = sectionLabel("HISTORY", shopBottomY, COL.dim);
+        hudElements.push(...historyHdr.elements);
+        const HISTORY_LINES = 5;
+        const historyRows = Array.from({ length: HISTORY_LINES }, (_, i) => {
+          const l = label(" ", historyHdr.nextY + i * 15, 10);
+          hudElements.push(l);
+          return l;
+        });
+
+        const history = [];
+        function logEvent(msg, col = COL.dim) {
+          history.unshift({ msg, col });
+          history.length = Math.min(history.length, HISTORY_LINES);
+          historyRows.forEach((r, i) => {
+            r.text = history[i] ? history[i].msg : " ";
+            r.color = history[i] ? history[i].col : COL.dim;
+          });
+        }
+
+        const footer = hudFooter(
+          "A/D: Move | W/Space: Jump | S: Pound | Shift: Dash | Esc: Menu",
+        );
+        hudElements.push(...footer.elements);
+
+        function handleShopAction(idx, isSelling) {
+          if (isDying || isGameOver) return;
+          const item = SHOP[idx];
+          if (isSelling) {
+            if (item.once && item.owned()) {
+              item.sell();
+              timeLeft += item.refund;
+              logEvent(`Sold ${item.name} +${item.refund}s`, COL.green);
+              play("shop", { volume: 0.5 });
+            }
+          } else {
+            const currentCost = getPrice(item.cost);
+            if (item.once && item.owned()) return;
+            if (timeLeft <= currentCost) {
+              logEvent("Not enough time!", COL.red);
+              return;
+            }
+            if (idx === 3) {
+              const under =
+                typeof player.curPlatform === "function"
+                  ? player.curPlatform()
+                  : null;
+              if (!player.isGrounded() || (under && !under.is("ground"))) {
+                logEvent("Needs solid ground", COL.red);
+                return;
+              }
+            }
+            timeLeft -= currentCost;
+            item.buy();
+            logEvent(`Bought ${item.name} -${currentCost}s`, COL.red);
+            play("shop", { volume: 0.5 });
+          }
+        }
+
+        // shop keys: the number keys or shift + number (SHIFT_KEYS below)
+        const SHIFT_KEYS = ["!", "@", "#", "$", "%", "^", "&"];
+        SHOP.forEach((s, i) => {
+          const keys = [s.key, SHIFT_KEYS[i]];
+          keys.forEach((k) => {
+            onKeyPress(k, () => {
+              const isSelling = isKeyDown("shift") || k === SHIFT_KEYS[i];
+              handleShopAction(i, isSelling);
+            });
+          });
+        });
+
+        function updateHud() {
+          if (isGameOver) return;
+          timeText.text = `${Math.max(0, timeLeft).toFixed(1)}s`;
+          timeText.color = timeLeft <= 10 ? COL.red : COL.text;
+          SHOP.forEach((s, i) => {
+            const row = shopRows[i];
+            const owned = s.once && s.owned();
+            const currentCost = getPrice(s.cost);
+            row.nameText.text = s.name;
+            if (owned) {
+              row.costText.text = `OWNED - Sell for +${s.refund}s`;
+              row.costText.color = COL.green;
+              row.nameText.color = COL.green;
+              row.bg.restColor = COL.btnOwned;
+              row.badge.color = COL.green;
+            } else {
+              const affordable = timeLeft > currentCost;
+              row.costText.text = `Buy for -${currentCost}s`;
+              row.costText.color = affordable ? COL.dim : COL.red;
+              row.nameText.color = COL.text;
+              row.bg.restColor = affordable ? COL.btn : COL.btnLocked;
+              row.badge.color = affordable ? COL.edge : rgb(80, 45, 45);
+            }
+            if (!row.bg.isHovering()) row.bg.color = row.bg.restColor;
+          });
+        }
+        updateHud();
+        logEvent(`Started ${LEVEL_NAMES[levelIndex]}`);
+        play("start");
+        onKeyPress("escape", () => go("menu"));
+
+        // end screen in the left hud when time runs out
+        function showEndScreenInLeftHud() {
+          hudElements.forEach((el) => {
+            if (el && el.exists()) destroy(el);
+          });
+          hudElements = [];
+
+          const endHeader = hudHeader(
+            LEVEL_NAMES[levelIndex],
+            "TIME'S UP!",
+            COL.red,
+          );
+          label(
+            run
+              ? "You ran out of time!\nThe run restarts from level 1."
+              : "You ran out of time!",
+            endHeader.bodyY,
+            11,
+            COL.text,
+          );
+
+          // dying in a continuous run sends you back to level 1 with a fresh timer.
+          // in level select you just retry the same level
+          const menuOptions = run
+            ? ["Restart Run", "Main Menu"]
+            : ["Retry Level", "Level Select", "Main Menu"];
+          menuList(
+            menuOptions,
+            endHeader.bodyY + (run ? 62 : 48),
+            36,
+            (idx) => {
+              if (run) {
+                if (idx === 0) go("game", 1, newRun());
+                else go("menu");
+              } else if (idx === 0) go("game", levelIndex);
+              else if (idx === 1) go("levelSelect");
+              else if (idx === 2) go("menu");
+            },
+            null,
+            15,
+          );
+
+          hudFooter(
+            "W/S or Up/Down: Choose\nEnter / Space / Click: Select\nEsc: Main Menu",
+          );
+
+          onKeyPress("r", () =>
+            run ? go("game", 1, newRun()) : go("game", levelIndex),
+          );
+        }
+
+        function triggerGameOver() {
+          if (isGameOver) return;
+          isGameOver = true;
+          shake(28); // big screen shake when time runs out
+          logEvent("Time Ran Out!", COL.red);
+          showEndScreenInLeftHud();
+        }
+
+        function isWallSliding() {
+          return wallActive() && !player.isGrounded() && player.isFalling();
+        }
+
+        function moveLeft() {
+          if (
+            isDying ||
+            isGameOver ||
+            time() < wallKickUntil ||
+            isGroundPounding ||
+            isDashing
+          )
+            return;
+          if (!BLOCKED_LEFT()) player.move(-moveSpeed, 0);
+          if (!isWallSliding()) player.flipX = true;
+        }
+
+        function moveRight() {
+          if (
+            isDying ||
+            isGameOver ||
+            time() < wallKickUntil ||
+            isGroundPounding ||
+            isDashing
+          )
+            return;
+          if (!BLOCKED_RIGHT()) player.move(moveSpeed, 0);
+          if (!isWallSliding()) player.flipX = false;
+        }
+
+        function doDash() {
+          if (
+            isDying ||
+            isGameOver ||
+            !hasDash ||
+            isDashing ||
+            isGroundPounding ||
+            time() < dashCooldownUntil
+          )
+            return;
+          isDashing = true;
+          dashCooldownUntil = time() + DASH_COOLDOWN;
+          const dir = player.flipX ? -1 : 1;
+          player.vel.x = dir * DASH_SPEED;
+          player.vel.y = 0;
+          logEvent("Dash!", COL.gold);
+          wait(DASH_DURATION, () => {
+            isDashing = false;
+            player.vel.x = 0;
+          });
+        }
+
+        function doJump() {
+          if (isDying || isGameOver || isGroundPounding || isDashing) return;
+          if (player.isGrounded()) {
+            player.jump(jumpForce);
+            jumpsRemaining = maxJumps - 1;
+            onSecondJump = false;
+          } else if (wallActive()) {
+            player.jump(WALL_JUMP_FORCE);
+            wallKickDir = -wallSide;
+            wallKickUntil = time() + WALL_KICK_TIME;
+            player.flipX = wallKickDir < 0;
+            wallSide = 0;
+            jumpsRemaining = maxJumps - 1;
+            onSecondJump = false;
+          } else if (jumpsRemaining > 0) {
+            player.jump(jumpForce);
+            jumpsRemaining--;
+            onSecondJump = true;
+          }
+        }
+
+        function doGroundPound() {
+          if (
+            isDying ||
+            isGameOver ||
+            player.isGrounded() ||
+            !hasGroundPound ||
+            isGroundPounding ||
+            isDashing
+          )
+            return;
+          isGroundPounding = true;
+          player.vel.x = 0;
+          player.vel.y = TILE_SIZE * 32;
+          logEvent("Ground Pound!", COL.gold);
+        }
+
+        onKeyDown("a", moveLeft);
+        onKeyDown("left", moveLeft);
+
+        onKeyDown("d", moveRight);
+        onKeyDown("right", moveRight);
+
+        onKeyPress("w", doJump);
+        onKeyPress("up", doJump);
+        onKeyPress("space", doJump);
+
+        onKeyPress("s", doGroundPound);
+        onKeyPress("down", doGroundPound);
+
+        onKeyPress("shift", doDash);
+
+        player.onGround(() => {
+          jumpsRemaining = maxJumps;
+          if (isGroundPounding) {
+            // check what we landed on BEFORE clearing the flag. landing on a cracked
+            // block also fires this same onGround event, and clearing the flag first
+            // meant the block's own collision handler always saw isGroundPounding as
+            // false so it never broke
+            const landedOn =
+              typeof player.curPlatform === "function"
+                ? player.curPlatform()
+                : null;
+            if (landedOn && landedOn.is && landedOn.is("cracked")) {
+              destroy(landedOn);
+              logEvent("Smashed Block!", COL.gold);
+              shake(4);
+            } else {
+              shake(2);
+            }
+            isGroundPounding = false;
+            // kill the leftover fast fall speed when you land, otherwise it keeps
+            // pushing the player into the floor for a tick before the collision
+            // push-out
+            player.vel.y = 0;
+          }
+        });
+
+        player.onCollideUpdate("ground", (w) => {
+          if (w.is("platform")) return;
+          // side wall tiles ("(" ")" "<" ">") only have a solid post over part of
+          // the tile, so manually set hitboxes here
+          let left = w.pos.x;
+          let right = w.pos.x + TILE_SIZE;
+          if (w.is("sideL")) {
+            right = w.pos.x + woodPostWidth;
+          } else if (w.is("sideR")) {
+            left = w.pos.x + woodRightOffset;
+          }
+          const wallCenter = (left + right) / 2;
+          const wallHalfWidth = (right - left) / 2;
+          const dx = player.pos.x - wallCenter;
+          const overlap =
+            Math.min(player.pos.y, w.pos.y + TILE_SIZE) -
+            Math.max(player.pos.y - HIT_H, w.pos.y);
+          if (
+            Math.abs(dx) > wallHalfWidth + HIT_W / 2 - 2 * PX &&
+            overlap > TILE_SIZE * 0.3
+          ) {
+            if (dx > 0) lastLeftWallTouch = time();
+            else lastRightWallTouch = time();
+          }
+        });
+
+        player.onCollideUpdate("climbable", (w) => {
+          if (!hasWallJump || isGameOver) return;
+          const col = Math.round(w.pos.x / TILE_SIZE);
+          if (col === 0 || col === numCols - 1) return;
+          const dx = player.pos.x - (w.pos.x + TILE_SIZE / 2);
+          const overlap =
+            Math.min(player.pos.y, w.pos.y + TILE_SIZE) -
+            Math.max(player.pos.y - HIT_H, w.pos.y);
+          if (
+            Math.abs(dx) > TILE_SIZE / 2 + HIT_W / 2 - 2 * PX &&
+            overlap > TILE_SIZE * 0.3
+          ) {
+            wallSide = dx > 0 ? -1 : 1;
+            lastWallTouch = time();
+          }
+        });
+
+        // trampoline
+        player.onCollide("trampoline", (t) => {
+          if (isDying || isGameOver) return;
+          const k = TILE_SIZE / 28;
+          if (player.pos.y > t.pos.y + 17 * k + TILE_SIZE * 0.25) return;
+
+          player.jump(jumpForce * TRAMPOLINE_BOOST);
+          jumpsRemaining = maxJumps - 1;
+          onSecondJump = false;
+          if (isGroundPounding) isGroundPounding = false;
+          play("bounce");
+          t.use(
+            sprite("trampoline_jump", {
+              width: TILE_SIZE,
+              height: TILE_SIZE,
+              anim: "anim",
+            }),
+          );
+          wait(0.45, () => {
+            if (t.exists())
+              t.use(
+                sprite("trampoline_idle", {
+                  width: TILE_SIZE,
+                  height: TILE_SIZE,
+                }),
+              );
+          });
+        });
+
+        // spike collision with screen shake and the hit animation. keeps checking while you stay
+        // touching it and not just on the first frame. the 0.8s cooldown below
+        // stops it from hurting you every single frame
+
+        function hurtPlayer(msg) {
+          if (isDying || isGameOver || time() - lastSpikeHit < 0.8) return;
+          lastSpikeHit = time();
+          hitUntil = time() + 0.55;
+          playerState = ""; // reset playerState so setAnim plays the hit sprite/anim again
+          timeLeft -= 10.0;
+          setAnim("hit");
+          if (player.play) player.play("anim");
+          player.jump(jumpForce * 0.5);
+          shake(4); // camera shake when you hit a trap
+          play("hit");
+          logEvent(msg, COL.red);
+        }
+        player.onCollideUpdate("spike", () => hurtPlayer("Spikes! -10s"));
+        player.onCollideUpdate("saw", () => hurtPlayer("Saw! -10s"));
+
+        // falling platform
+        player.onCollide("fallingPlatform", (fp) => {
+          if (fp.triggered || isGameOver) return;
+          fp.triggered = true;
+          fp.use(
+            sprite("falling_on", {
+              anim: "anim",
+              width: fp.fpWidth ?? TILE_SIZE,
+              height: fp.fpHeight ?? TILE_SIZE / 2.5,
+            }),
+          );
+          wait(1, () => {
+            fp.falling = true;
+          });
+        });
+
+        // pickups
+        player.onCollide("timePickup", (pickup) => {
+          if (isGameOver) return;
+          destroy(pickup);
+          timeLeft += 8.0;
+          play("apple");
+          logEvent("Apple +8s", COL.green);
+        });
+
+        player.onCollide("goal", () => {
+          if (isGameOver || levelFinished) return;
+          levelFinished = true;
+          if (run) {
+            // continuous: save the time left and this level's time, then go straight
+            // to the next level (or the win screen if that was the last one)
+            run.timeLeft = timeLeft;
+            run.splits.push({ level: levelIndex, taken: elapsed });
+            if (levelIndex + 1 < LEVELS.length) {
+              go("game", levelIndex + 1, run);
+            } else {
+              go("win", {
+                mode: "continuous",
+                timeLeft,
+                splits: run.splits,
+              });
+            }
+          } else {
+            // level select: only this level, so go to the win screen
+            go("win", {
+              mode: "single",
+              levelIndex,
+              timeLeft,
+              taken: elapsed,
+            });
+          }
+        });
+
+        onUpdate(() => {
+          // stop updating stuff when it's game over
+          if (isGameOver) return;
+
+          if (isDying) return;
+
+          timeLeft -= dt();
+          elapsed += dt();
+          updateHud();
+
+          if (timeLeft <= 0) {
+            timeLeft = 0;
+            triggerGameOver();
+            play("lose");
+            return;
+          }
+
+          // apple magnet
+          if (hasAppleMagnet) {
+            const apples = level.get("timePickup");
+            apples.forEach((apple) => {
+              const d = player.pos.dist(apple.pos);
+              if (d < TILE_SIZE * 6) {
+                const dir = player.pos.sub(apple.pos).unit();
+                apple.pos = apple.pos.add(dir.scale(TILE_SIZE * 3 * dt()));
+              }
+            });
+          }
+
+          // falling platforms
+          level.get("fallingPlatform").forEach((fp) => {
+            if (fp.falling) {
+              fp.pos.y += TILE_SIZE * 5 * dt();
+              fp.opacity = (fp.opacity ?? 1) - dt() * 1.5;
+              if (fp.opacity <= 0) destroy(fp);
+            }
+          });
+
+          // moving platforms and saws just go back and forth. don't move the player
+          // by hand here, kaplay's body() already carries whatever is standing on a
+          // platform (doing both made the player go double speed)
+          level.get("movingPlatform").forEach(updateMover);
+          level.get("saw").forEach(updateMover);
+
+          // ground pound fall speed
+          if (isGroundPounding) {
+            player.vel.x = 0;
+            player.vel.y = TILE_SIZE * 32;
+          }
+
+          // dash: flat sideways burst, ignore gravity while it lasts so it's more of
+          // a snap than an arc
+          if (isDashing) {
+            player.vel.y = 0;
+          }
+
+          if (player.pos.y > height() + 100) {
+            logEvent("Fell into void", COL.red);
+            isDying = true;
+            setAnim("hit");
+            if (player.play) player.play("anim");
+            hitUntil = time() + 0.6;
+            wait(0.5, () => triggerGameOver());
+            return;
+          }
+
+          if (time() < wallKickUntil)
+            player.move(wallKickDir * WALL_KICK_SPEED, 0);
+          if (isWallSliding() && player.vel && player.vel.y > TILE_SIZE * 4) {
+            player.vel.y = TILE_SIZE * 4;
+          }
+
+          refreshAnim();
+        });
+      });
+
+      // ---- scenes (menu, level select, game over, win) ----
+      scene("menu", () => {
+        showPreview(0);
+        drawRightPlaceholder();
+        drawHudBase();
+        const hdr = hudHeader("MAIN MENU");
+        label(
+          "Every second is a coin.\nSpend wisely to survive.",
+          hdr.bodyY,
+          11,
+          COL.dim,
+        );
+
+        menuList(["Play Game", "How to Play"], hdr.bodyY + 40, 36, (i) => {
+          if (i === 0) go("modeSelect");
+          else go("howToPlay");
+        });
+        hudFooter("W/S or Arrows: Choose\nEnter / Click: Confirm");
+      });
+
+      // after pressing play: pick continuous or level select
+      scene("modeSelect", () => {
+        showPreview(1);
+        drawHudBase();
+        const hdr = hudHeader("SELECT MODE", null, COL.gold);
+        const DESCS = [
+          "Play every level back to back on one shared clock. Dying sends you back to level 1.",
+          "Pick any single level and play just that one. Retry it if you run out of time.",
+          "",
+        ];
+        const desc = label("", hdr.bodyY, 11, COL.dim);
+        menuList(
+          ["Continuous", "Level Select", "Back"],
+          hdr.bodyY + 50,
+          36,
+          (i) => {
+            if (i === 0) go("game", 1, newRun());
+            else if (i === 1) go("levelSelect");
+            else go("menu");
+          },
+          (i) => {
+            desc.text = DESCS[i];
+          },
+          15,
+        );
+        onKeyPress("escape", () => go("menu"));
+        hudFooter("W/S: Navigate | Enter: Select\nEsc: Back");
+      });
+
+      scene("levelSelect", () => {
+        let preview = showPreview(1);
+        drawHudBase();
+        const hdr = hudHeader("LEVEL SELECT", null, COL.gold);
+
+        const names = LEVELS.map(
+          (_, i) => `${i - 1}. ${LEVEL_NAMES[i]}`,
+        ).concat("Back");
+        names.shift(); // level 0 is just the decorative one so it can't be picked
+        const lastLevelPos = names.length - 1; // where the back button is
+
+        menuList(
+          names,
+          hdr.bodyY,
+          24,
+          (i) => (i < lastLevelPos ? go("game", i + 1) : go("modeSelect")),
+          (i) => {
+            if (i >= lastLevelPos) return;
+            preview.forEach(destroy);
+            preview = showPreview(i + 1);
+          },
+          13,
+        );
+        onKeyPress("escape", () => go("modeSelect"));
+        hudFooter("W/S: Navigate | Enter: Start\nEsc: Back");
+      });
+
+      scene("gameover", (currentLevel = 0) => {
+        showPreview(currentLevel);
+        drawHudBase();
+        const hdr = hudHeader(LEVEL_NAMES[currentLevel], "TIME'S UP!", COL.red);
+        label("You ran out of time!", hdr.bodyY, 11, COL.text);
+
+        menuList(
+          ["Retry Level", "Level Select", "Main Menu"],
+          hdr.bodyY + 48,
+          36,
+          (i) => {
+            if (i === 0) go("game", currentLevel);
+            else if (i === 1) go("levelSelect");
+            else go("menu");
+          },
+        );
+
+        hudFooter("W/S: Navigate | Enter: Select\nSpace: Quick Retry");
+        onKeyPress("space", () => go("game", currentLevel));
+        onKeyPress("escape", () => go("menu"));
+      });
+
+      // win screen. result is one of these:
+      //   { mode: "continuous", timeLeft, splits: [{ level, taken }, ...] }
+      //   { mode: "single", levelIndex, timeLeft, taken }
+      scene("win", (result = {}) => {
+        const isRun = result.mode === "continuous";
+        const levelIndex = result.levelIndex ?? 1;
+        const timeLeft = result.timeLeft ?? 0;
+        const splits = result.splits ?? [];
+
+        showPreview(isRun ? LEVELS.length - 1 : levelIndex);
+        drawHudBase();
+        const hdr = isRun
+          ? hudHeader("YOU BEAT THE GAME!", "VICTORY!", COL.gold)
+          : hudHeader(LEVEL_NAMES[levelIndex], "LEVEL CLEARED!", COL.gold);
+        play("victory");
+
+        let y = hdr.bodyY;
+        label("TIME LEFT", y, 9, COL.dim);
+        label(`${timeLeft.toFixed(1)}s`, y + 12, 24, COL.gold);
+        y += 48;
+
+        if (isRun) {
+          // time taken in each level, then the total
+          y = sectionLabel("TIME TAKEN PER LEVEL", y, COL.dim).nextY;
+          let total = 0;
+          for (const sp of splits) {
+            total += sp.taken;
+            add([
+              text(`${sp.level - 1}. ${LEVEL_NAMES[sp.level]}`, { size: 9 }),
+              pos(14, y),
+              color(COL.text),
+              z(103),
+              fixed(),
+            ]);
+            add([
+              text(`${sp.taken.toFixed(1)}s`, { size: 9 }),
+              pos(HUD_W - 14, y),
+              anchor("topright"),
+              color(COL.gold),
+              z(103),
+              fixed(),
+            ]);
+            y += 14;
+          }
+          y += 4;
+          add([
+            text("TOTAL", { size: 10 }),
+            pos(14, y),
+            color(COL.text),
+            z(103),
+            fixed(),
+          ]);
+          add([
+            text(`${total.toFixed(1)}s`, { size: 10 }),
+            pos(HUD_W - 14, y),
+            anchor("topright"),
+            color(COL.gold),
+            z(103),
+            fixed(),
+          ]);
+          y += 26;
+        } else {
+          label("TIME TAKEN", y, 9, COL.dim);
+          label(`${(result.taken ?? 0).toFixed(1)}s`, y + 12, 16, COL.text);
+          y += 48;
+        }
+
+        const options = isRun
+          ? ["Play Again", "Main Menu"]
+          : ["Retry Level", "Level Select", "Main Menu"];
+        menuList(options, y, 36, (i) => {
+          if (isRun) {
+            if (i === 0) go("game", 1, newRun());
+            else go("menu");
+          } else if (i === 0) go("game", levelIndex);
+          else if (i === 1) go("levelSelect");
+          else go("menu");
+        });
+
+        hudFooter("W/S: Navigate | Enter: Select\nEsc: Main Menu");
+        onKeyPress("escape", () => go("menu"));
+      });
+
+      scene("howToPlay", () => {
+        // how to play uses the whole canvas instead of the narrow hud so the text
+        // has room and doesn't wrap into the next section
+        add([rect(width(), height()), pos(0, 0), color(COL.panel), fixed()]);
+
+        const margin = 32;
+        const gap = 24;
+        const colW = Math.floor((width() - margin * 2 - gap) / 2);
+        const leftX = margin;
+        const rightX = margin + colW + gap;
+
+        add([
+          rect(width() - margin * 2, 64),
+          pos(margin, 20),
+          color(COL.panelHeader),
+          fixed(),
+        ]);
+        add([
+          rect(width() - margin * 2, 3),
+          pos(margin, 81),
+          color(COL.gold),
+          fixed(),
+        ]);
+        add([
+          text("HOW TO PLAY", { size: 21, width: width() - margin * 2 }),
+          pos(margin + 16, 34),
+          color(COL.text),
+          fixed(),
+        ]);
+        add([
+          text("TIME IS MONEY", { size: 10, width: colW }),
+          pos(margin + 16, 54),
+          color(COL.gold),
+          fixed(),
+        ]);
+
+        const section = (x, y, title, body) => {
+          add([
+            text(title, { size: 11, width: colW }),
+            pos(x, y),
+            color(COL.gold),
+            fixed(),
+          ]);
+          const bodyLines = body.split("\n");
+          add([
+            text(body, { size: 11, width: colW }),
+            pos(x, y + 17),
+            color(COL.text),
+            fixed(),
+          ]);
+          return y + 17 + bodyLines.length * 14 + 18;
+        };
+
+        let leftY = 108;
+        leftY = section(
+          leftX,
+          leftY,
+          "1. YOUR GOAL",
+          "Reach the waving flag before the clock hits zero.\n" +
+            "Every second is both time to finish and money to spend,\n" +
+            "so the safest route is not always the most expensive one.",
+        );
+
+        leftY = section(
+          leftX,
+          leftY,
+          "2. MOVE & JUMP",
+          "A / D or Left / Right: Move\n" +
+            "W / Up / Space: Jump\n" +
+            "S / Down: Ground Pound (once bought)\n" +
+            "Shift: Dash (once bought)\n" +
+            "Double Jump adds a second jump in mid-air.\n" +
+            "Wall Jump lets you kick away from a climbable wall.",
+        );
+
+        section(
+          leftX,
+          leftY,
+          "3. WATCH THE TERRAIN",
+          "Spikes cost 10 seconds and knock you backward.\n" +
+            "Falling platforms drop after you step on them.\n" +
+            "Falling into the void ends the run.\n" +
+            "Ground Pound can smash cracked brick blocks.",
+        );
+
+        let rightY = 108;
+        rightY = section(
+          rightX,
+          rightY,
+          "4. COLLECT TIME",
+          "Apples add 8 seconds to the clock.\n" +
+            "The Apple Magnet pulls nearby apples toward you\n" +
+            "from roughly six tiles away. Collecting time lets you\n" +
+            "buy more upgrades without immediately running out.",
+        );
+
+        rightY = section(
+          rightX,
+          rightY,
+          "5. SPEND TIME IN THE SHOP",
+          "1 Double Jump — 15s\n" +
+            "2 Dash — 5s     3 Platform — 5s\n" +
+            "4 Trampoline — 8s     5 Wall Jump — 12s\n" +
+            "6 Ground Pound — 8s     7 Apple Magnet — 12s\n" +
+            "Dash gives a short burst of horizontal speed.\n" +
+            "Trampoline gives about 1.5× jump height.\n" +
+            "Platforms and Trampolines can be placed during a level.",
+        );
+
+        section(
+          rightX,
+          rightY,
+          "6. BUY, SELL & SAVE",
+          "Press 1–7 or click an item to buy it.\n" +
+            "Hold Shift while selecting a one-shot upgrade to sell it.\n" +
+            "Selling gives the listed partial refund.\n" +
+            "Below 20 seconds, shop prices increase as your time falls.",
+        );
+
+        add([
+          rect(width() - margin * 2, 42),
+          pos(margin, height() - 58),
+          color(COL.panelHeader),
+          fixed(),
+        ]);
+        add([
+          text("Enter / Space / Esc: Back to Menu", {
+            size: 11,
+            width: width() - margin * 2,
+          }),
+          pos(margin + 16, height() - 44),
+          color(COL.dim),
+          fixed(),
+        ]);
+
+        onKeyPress("enter", () => go("menu"));
+        onKeyPress("space", () => go("menu"));
+        onKeyPress("escape", () => go("menu"));
+      });
+
+      go("menu");
+    </script>
+  </body>
+</html>
