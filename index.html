@@ -89,7 +89,7 @@
       // timers above added together (level 0 is just the menu background so it
       // doesn't count) minus a number i hard coded to my own taste.
 
-      const CONTINUOUS_TIME_REDUCTION = 190;
+      const CONTINUOUS_TIME_REDUCTION = 70;
 
       function continuousStartTime() {
         let total = 0;
@@ -569,7 +569,7 @@
           "< S  S  S P S   >",
           "< D  D  D $$D ^^>",
           "< I^^I^^I   I PP>",
-          "<  PP MMD $$D   >",
+          "<  PP PPD $$D   >",
           "WKKKKKK SICOWKKKW",
           "<      VDCOW    >",
           "<     P I COW   >",
@@ -587,7 +587,7 @@
       // map (counting from 0 at the top left).
 
       const MOVER_DEFAULTS = {
-        M: { range: 0, speed: 0, axis: "x" },
+        M: { range: 4, speed: 2, axis: "x" },
         X: { range: 0, speed: 0, axis: "x" },
       };
       const MOVER_CONFIG = {
@@ -1212,6 +1212,20 @@
             obj.pos[a] = obj.moverLo;
             obj.moverDir = 1;
           }
+        }
+
+        // is the player standing on top of this moving platform right now?
+        // checks the actual positions instead of curPlatform(), which wasn't
+        // reliable for these platforms (so the player never got carried)
+        function standingOn(mp) {
+          if (player.vel.y < 0) return false; // going up (jumping), not riding
+          const feetGap = player.pos.y - mp.pos.y; // feet vs the platform top
+          if (Math.abs(feetGap) > TILE_SIZE * 0.25) return false;
+          const half = HIT_W / 2;
+          return (
+            player.pos.x + half > mp.pos.x &&
+            player.pos.x - half < mp.pos.x + TILE_SIZE
+          );
         }
 
         const player = level.get("player")[0];
@@ -1986,10 +2000,20 @@
             }
           });
 
-          // moving platforms and saws just go back and forth. don't move the player
-          // by hand here, kaplay's body() already carries whatever is standing on a
-          // platform (doing both made the player go double speed)
-          level.get("movingPlatform").forEach(updateMover);
+          // moving platforms and saws just go back and forth. the platforms also
+          // carry the player: check if they're standing on it BEFORE it moves,
+          // then shift the player by exactly how far the platform moved so they
+          // stay the same speed (works for the up/down ones too)
+          level.get("movingPlatform").forEach((mp) => {
+            const onIt = standingOn(mp);
+            const oldX = mp.pos.x;
+            const oldY = mp.pos.y;
+            updateMover(mp);
+            if (onIt) {
+              player.pos.x += mp.pos.x - oldX;
+              player.pos.y += mp.pos.y - oldY;
+            }
+          });
           level.get("saw").forEach(updateMover);
 
           // ground pound fall speed
